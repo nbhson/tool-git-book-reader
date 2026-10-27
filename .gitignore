@@ -1,0 +1,74 @@
+# Xcode
+## Build & Generated
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdatad
+*.xcworkspace/xcuserdata
+*.xcuserdata
+
+## Project
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+## Swift Package Manager
+.swiftpm/
+Packages/
+*.xcodeproj/swiftpackage/
+
+## CocoaPods
+Pods/
+*.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+
+## Carthage
+Carthage/
+
+## .DS_Store
+.DS_Store
+**/.DS_Store
+
+## Auto-generated files
+*.hmap
+*.apport
+*.dSYM
+*.dSYM.ids
+
+## Temporary
+*.swp
+*~
+\#*\#
+.\#*
+
+## IDE
+.vscode/
+.idea/
+*.pbxuser
+!default.pbxuser
+*.mode1
+!default.mode1
+*.mode2
+!default.mode2
+*.mode3
+!default.mode3
+*.perspective
+!default.perspective
+*.perspectivev3
+!default.perspectivev3
+
+## Debug
+*.moved-aside
+
+## Playgrounds
+Playgrounds/
+
+## Test results
+*.test-results
+
+## Localization
+*.lproj/Base.lproj/
+
+## Misc
+*.log
+*.tmp
+*.temp
