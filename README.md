@@ -16,9 +16,13 @@ GitBookReader is a cross-platform SwiftUI app for browsing and reading Markdown 
 
 ## Requirements
 
-- Xcode 15+ (Swift 5.9+)
-- macOS 26.2+ / iOS 26.2+ / visionOS 26.2+
+- Xcode 26+ (project uses Xcode 16+ file-system-synchronized groups and Swift 5 language mode)
+- Deployment targets: macOS 26.2+ / iOS 26.2+ / visionOS 26.2+ (single target, `SUPPORTED_PLATFORMS` includes macosx, iphoneos, xros)
 - Internet connection (GitHub API)
+
+> **Note:** `xcodebuild` requires a full Xcode installation. With only
+> Command Line Tools (`/Library/Developer/CommandLineTools`) the project
+> cannot be built from the CLI — open it in Xcode instead.
 
 ## Dependencies
 
@@ -80,9 +84,16 @@ GitBookReader/
 
 - **MVVM-inspired**: `GitHubService` acts as the model layer (fetching + caching), views are pure UI.
 - **`@MainActor`**: Services are marked `@MainActor` for SwiftUI safety.
-- **Error handling**: Typed `GitHubError` enum with localized descriptions.
-- **Caching**: `NSCache` for fetched Markdown files (memory-only, auto-evicts).
-- **Retry logic**: Automatic retry (up to 3 attempts) for transient network failures.
+- **Error handling**: Typed `GitHubError` enum with localized descriptions and recovery suggestions.
+- **Caching**: `NSCache` for fetched Markdown files (memory-only, auto-evicts); the cache is shared app-wide — `MarkdownReaderView` receives the same `GitHubService` instance as `ContentView`.
+- **Retry logic**: Automatic retry (up to 3 attempts) with linear backoff for transient network failures.
+- **Breadcrumbs**: Every surviving `FileNode` keeps a `parent` reference after tree pruning, so the breadcrumb shows the full path at any depth.
+
+## Known Limitations
+
+- No unit-test target yet — verification is currently manual (open in Xcode) or via static type-checking (`swiftc -typecheck`).
+- GitHub API requests are unauthenticated: rate limits (60 req/h) apply, surfaced as a friendly error.
+- Very large repositories whose git tree response is truncated by GitHub are rendered partially (the `truncated` flag is not surfaced in the UI).
 
 ## Contributing
 
