@@ -7,12 +7,22 @@ struct MarkdownReaderView: View {
     // MARK: - Properties
     let file: FileNode
 
-    @StateObject private var service = GitHubService()
+    /// Shared with `ContentView` so raw-file caching spans the whole app.
+    private let service: GitHubService
+
     @StateObject private var speechManager = SpeechManager()
     @State private var markdownText = ""
-    @State private var loadAttempted = false
+    @State private var isLoading = false
+    @State private var errorMessage: String?
 
     @EnvironmentObject private var settings: BookSettings
+
+    // MARK: - Initialization
+
+    init(file: FileNode, service: GitHubService) {
+        self.file = file
+        self.service = service
+    }
 
     // MARK: - Body
 
@@ -41,11 +51,11 @@ struct MarkdownReaderView: View {
     private var contentArea: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if service.isLoading {
+                if isLoading {
                     LoadingView(message: String(localized: "loading.content"))
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.top, 50)
-                } else if let error = service.errorMessage {
+                } else if let error = errorMessage {
                     ErrorView(
                         title: String(localized: "error.loadFailed"),
                         message: error,
@@ -142,6 +152,7 @@ struct MarkdownReaderView: View {
 
     // MARK: - Data Loading
 
+    /// Fetches the raw Markdown for `file` (optionally bypassing cache) and prepares it for display.
     private func loadContent(forceReload: Bool = false) async {
         guard let url = file.downloadUrl else { return }
 
@@ -149,17 +160,16 @@ struct MarkdownReaderView: View {
             service.clearCache()
         }
 
-        service.isLoading = true
-        service.errorMessage = nil
+        isLoading = true
+        errorMessage = nil
+
+        defer { isLoading = false }
 
         do {
             let content = try await service.fetchRawContent(downloadUrl: url)
-            let processed = MarkdownContentProcessor.process(content)
-            markdownText = processed
-            service.isLoading = false
+            markdownText = MarkdownContentProcessor.process(content)
         } catch {
-            service.errorMessage = error.localizedDescription
-            service.isLoading = false
+            errorMessage = error.localizedDescription
         }
     }
 }

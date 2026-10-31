@@ -35,8 +35,8 @@ extension FileNode {
         return result
     }
 
-    /// Returns the display name with the .md extension removed.
+    /// Returns the display name with a trailing `.md` extension removed.
     var displayName: String {
-        name.replacingOccurrences(of: ".md", with: "")
+        name.hasSuffix(".md") ? String(name.dropLast(3)) : name
     }
 }

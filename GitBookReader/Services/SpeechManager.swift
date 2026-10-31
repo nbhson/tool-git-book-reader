@@ -28,9 +28,9 @@ class SpeechManager: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
 
     // MARK: - Public Methods
 
-    /// Toggles speech playback
+    /// Toggles speech playback: starts reading `text`, or stops if already speaking.
     func toggleSpeech(text: String) {
-        guard let synthesizer = synthesizer else { return }
+        guard synthesizer != nil else { return }
 
         if isSpeaking {
             stop()

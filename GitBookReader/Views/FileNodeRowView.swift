@@ -53,20 +53,20 @@ struct FileNodeRowView: View {
     }
 
     private var fileRow: some View {
-        NavigationLink(value: node) {
+        Button(action: { selectedFile = node }) {
             HStack {
                 Image(systemName: "doc.plaintext.fill")
                     .foregroundColor(.secondary)
                     .accessibilityHidden(true)
 
-                Text(node.name.replacingOccurrences(of: ".md", with: ""))
+                Text(node.displayName)
                     .foregroundColor(.primary)
             }
             .padding(.vertical, 2)
+            .contentShape(Rectangle())
         }
-        .accessibilityLabel(node.name.replacingOccurrences(of: ".md", with: ""))
+        .buttonStyle(.plain)
+        .accessibilityLabel(node.displayName)
+        .accessibilityHint(String(localized: "accessibility.openFile"))
     }
 }
-
-// MARK: - Preview
-

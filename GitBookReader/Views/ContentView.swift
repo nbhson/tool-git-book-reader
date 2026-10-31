@@ -117,7 +117,7 @@ struct ContentView: View {
             if file.isDirectory {
                 FolderGridView(nodes: file.children ?? [], selectedFile: $selectedFile)
             } else {
-                MarkdownReaderView(file: file)
+                MarkdownReaderView(file: file, service: service)
             }
         } else if rootNodes.isEmpty {
             EmptyStateView(
@@ -165,6 +165,3 @@ struct ContentView: View {
         .help(String(localized: "toolbar.refresh"))
     }
 }
-
-// MARK: - Preview
-
