@@ -195,6 +195,3 @@ private struct RecentRepoChip: View {
         .cornerRadius(8)
     }
 }
-
-// MARK: - Preview
-

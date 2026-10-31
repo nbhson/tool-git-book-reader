@@ -59,7 +59,7 @@ private struct FolderGridItemView: View {
                     .shadow(color: .black.opacity(0.1), radius: 3, y: 2)
                     .accessibilityHidden(true)
 
-                Text(node.name.replacingOccurrences(of: ".md", with: ""))
+                Text(node.displayName)
                     .font(.callout)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
@@ -81,6 +81,3 @@ private struct FolderGridItemView: View {
             : String(localized: "accessibility.openFile"))
     }
 }
-
-// MARK: - Preview
-

@@ -104,6 +104,3 @@ struct RecentHistorySheet: View {
         .accessibilityLabel(repo)
     }
 }
-
-// MARK: - Preview
-

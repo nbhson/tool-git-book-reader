@@ -72,6 +72,3 @@ struct BreadcrumbView: View {
             .accessibilityHidden(true)
     }
 }
-
-// MARK: - Preview
-
