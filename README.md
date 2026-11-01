@@ -86,14 +86,15 @@ GitBookReader/
 - **`@MainActor`**: Services are marked `@MainActor` for SwiftUI safety.
 - **Error handling**: Typed `GitHubError` enum with localized descriptions and recovery suggestions.
 - **Caching**: `NSCache` for fetched Markdown files (memory-only, auto-evicts); the cache is shared app-wide — `MarkdownReaderView` receives the same `GitHubService` instance as `ContentView`.
+- **Offline cache**: repository trees and opened Markdown files are also persisted under Application Support (`OfflineCacheStore`), so previously opened repositories stay readable offline — the sidebar shows an "Offline mode" banner when serving cached data.
 - **Retry logic**: Automatic retry (up to 3 attempts) with linear backoff for transient network failures.
 - **Breadcrumbs**: Every surviving `FileNode` keeps a `parent` reference after tree pruning, so the breadcrumb shows the full path at any depth.
 
 ## Known Limitations
 
-- No unit-test target yet — verification is currently manual (open in Xcode) or via static type-checking (`swiftc -typecheck`).
+- Unit tests cover the pure logic (`extractOwnerAndRepo`, `buildTree`, `MarkdownContentProcessor`, `OfflineCacheStore`) via the SwiftPM package at the repo root (`swift test`); UI code still requires building in Xcode.
 - GitHub API requests are unauthenticated: rate limits (60 req/h) apply, surfaced as a friendly error.
-- Very large repositories whose git tree response is truncated by GitHub are rendered partially (the `truncated` flag is not surfaced in the UI).
+- Very large repositories whose git tree response is truncated by GitHub are rendered partially — the sidebar shows a warning banner when this happens.
 
 ## Contributing
 
