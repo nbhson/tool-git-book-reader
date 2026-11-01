@@ -104,13 +104,37 @@ class SpeechManager: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
             )
         }
 
-        // Remove markdown symbols
-        return cleanText
+        // Remove markdown symbols. Hyphens are handled separately in
+        // `cleanHyphensForSpeech` so meaningful hyphens inside words
+        // (e.g. "well-known") are preserved for speech.
+        return Self.cleanHyphensForSpeech(cleanText)
             .replacingOccurrences(of: "#", with: "")
             .replacingOccurrences(of: "*", with: "")
             .replacingOccurrences(of: ">", with: "")
             .replacingOccurrences(of: "`", with: "")
-            .replacingOccurrences(of: "-", with: "")
+    }
+
+    /// Removes hyphen-only Markdown constructs — list bullets at the start of
+    /// a line and horizontal rules — while keeping hyphens that are part of
+    /// words (`well-known`, `state-of-the-art`) or numbers (`-5`) intact.
+    private static func cleanHyphensForSpeech(_ text: String) -> String {
+        var result = text
+
+        // Horizontal rules: a line consisting only of 3+ hyphens.
+        result = result.replacingOccurrences(
+            of: "(?m)^\\s*-{3,}\\s*$",
+            with: " ",
+            options: .regularExpression
+        )
+
+        // List bullets: a hyphen at the start of a line, followed by whitespace.
+        result = result.replacingOccurrences(
+            of: "(?m)^\\s*-\\s+",
+            with: "",
+            options: .regularExpression
+        )
+
+        return result
     }
 
     private func extractParagraphs(from text: String) -> [String] {
