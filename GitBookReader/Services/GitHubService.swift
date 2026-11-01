@@ -14,6 +14,13 @@ final class GitHubService: ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var rootNodes: [FileNode] = []
 
+    /// `true` when GitHub reports the recursive git tree as truncated
+    /// (repositories with very many files); the sidebar may be incomplete.
+    @Published private(set) var isTreeTruncated = false
+
+    /// Non-nil when content is currently served from the offline cache.
+    @Published private(set) var offlineNotice: String?
+
     /// Recent repositories for quick access
     @Published var recentRepos: [String] = [] {
         didSet {
@@ -23,6 +30,7 @@ final class GitHubService: ObservableObject {
 
     // MARK: - Private Properties
     private let rawFileCache = NSCache<NSString, NSString>()
+    private let offlineCache = OfflineCacheStore()
     private let maxRecentRepos = 20
     private let maxRetryAttempts = 3
     private let retryDelay: UInt64 = 1_000_000_000 // 1 second in nanoseconds
@@ -48,9 +56,11 @@ final class GitHubService: ObservableObject {
 
         isLoading = true
         errorMessage = nil
+        isTreeTruncated = false
+        offlineNotice = nil
         rootNodes = []
 
-        guard let (owner, repo) = extractOwnerAndRepo(from: cleanedUrl) else {
+        guard let (owner, repo) = Self.extractOwnerAndRepo(from: cleanedUrl) else {
             errorMessage = GitHubError.invalidURL.errorDescription
             isLoading = false
             return
@@ -69,6 +79,9 @@ final class GitHubService: ObservableObject {
 
     /// Fetches raw file content from a download URL, using a memory cache first.
     ///
+    /// Falls back to the on-disk offline cache when the network request
+    /// fails, so previously opened files remain readable offline.
+    ///
     /// - Throws: `GitHubError.fileNotFound` on 404, `GitHubError.decodingError`
     ///   for non-UTF-8 content, or a network error otherwise.
     func fetchRawContent(downloadUrl: URL) async throws -> String {
@@ -78,28 +91,38 @@ final class GitHubService: ObservableObject {
             return String(cachedContent)
         }
 
-        let (data, response) = try await URLSession.shared.data(from: downloadUrl)
+        do {
+            let (data, response) = try await URLSession.shared.data(from: downloadUrl)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw GitHubError.unknown
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            if httpResponse.statusCode == 404 {
-                throw GitHubError.fileNotFound
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw GitHubError.unknown
             }
-            if httpResponse.statusCode == 403 {
-                throw GitHubError.rateLimitExceeded
+
+            guard httpResponse.statusCode == 200 else {
+                if httpResponse.statusCode == 404 {
+                    throw GitHubError.fileNotFound
+                }
+                if httpResponse.statusCode == 403 {
+                    throw GitHubError.rateLimitExceeded
+                }
+                throw GitHubError.networkError(underlying: URLError(.badServerResponse))
             }
-            throw GitHubError.networkError(underlying: URLError(.badServerResponse))
-        }
 
-        guard let content = String(data: data, encoding: .utf8) else {
-            throw GitHubError.decodingError
-        }
+            guard let content = String(data: data, encoding: .utf8) else {
+                throw GitHubError.decodingError
+            }
 
-        rawFileCache.setObject(NSString(string: content), forKey: cacheKey)
-        return content
+            rawFileCache.setObject(NSString(string: content), forKey: cacheKey)
+            offlineCache.saveFile(downloadUrl: downloadUrl, content: content)
+            return content
+        } catch {
+            // Offline fallback: serve the persisted copy when available.
+            if let cachedContent = offlineCache.loadFile(downloadUrl: downloadUrl) {
+                offlineNotice = String(localized: "cache.offlineNotice")
+                return cachedContent
+            }
+            throw error
+        }
     }
 
     /// Clears all cached Markdown content.
@@ -142,15 +165,38 @@ final class GitHubService: ObservableObject {
     }
 
     /// Fetches the default branch, then the full git tree, and builds the sidebar tree.
+    /// On failure, falls back to the on-disk offline cache when available.
     private func fetchRepository(owner: String, repo: String) async {
         do {
             let defaultBranch = try await fetchDefaultBranch(owner: owner, repo: repo)
             let treeItems = try await fetchTreeWithRetry(owner: owner, repo: repo, branch: defaultBranch)
-            let nodes = buildTree(from: treeItems, owner: owner, repo: repo, branch: defaultBranch)
+            let nodes = Self.buildTree(from: treeItems, owner: owner, repo: repo, branch: defaultBranch)
+
+            offlineCache.saveTree(
+                owner: owner,
+                repo: repo,
+                branch: defaultBranch,
+                items: treeItems,
+                truncated: isTreeTruncated
+            )
 
             rootNodes = nodes
             isLoading = false
         } catch {
+            serveCachedTreeIfAvailable(owner: owner, repo: repo, error: error)
+        }
+    }
+
+    /// Falls back to the persisted tree cache when fetching fails
+    /// (e.g. the device is offline), so opened repositories stay readable.
+    private func serveCachedTreeIfAvailable(owner: String, repo: String, error: Error) {
+        if let cachedTree = offlineCache.loadTree(owner: owner, repo: repo) {
+            rootNodes = Self.buildTree(from: cachedTree.items, owner: owner, repo: repo, branch: cachedTree.branch)
+            isTreeTruncated = cachedTree.truncated
+            offlineNotice = String(localized: "cache.offlineNotice")
+            errorMessage = nil
+            isLoading = false
+        } else {
             handleError(error)
         }
     }
@@ -198,6 +244,7 @@ final class GitHubService: ObservableObject {
 
         do {
             let treeResponse = try JSONDecoder().decode(GitTreeResponse.self, from: data)
+            isTreeTruncated = treeResponse.truncated
             return treeResponse.tree
         } catch {
             throw GitHubError.decodingError
@@ -236,7 +283,9 @@ final class GitHubService: ObservableObject {
     /// Accepts `https://github.com/owner/repo`, `www.github.com/owner/repo`,
     /// bare `github.com/owner/repo`, an optional `.git` suffix, and trailing
     /// slashes. Returns `nil` when the string is not a valid GitHub repo URL.
-    private func extractOwnerAndRepo(from url: String) -> (String, String)? {
+    /// Internal + `static` (instead of `private`) so the SwiftPM test target
+    /// can exercise the parsing logic directly; it is a pure function.
+    static func extractOwnerAndRepo(from url: String) -> (String, String)? {
         let cleanedUrl = url
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -265,7 +314,9 @@ final class GitHubService: ObservableObject {
     /// Builds the sidebar tree from recursive git-tree items, keeping only
     /// directories and Markdown files, sorted folders-first, and prunes
     /// directories that contain no Markdown files.
-    private func buildTree(from items: [GitTreeItem], owner: String, repo: String, branch: String) -> [FileNode] {
+    /// Internal + `static` (instead of `private`) so the SwiftPM test target
+    /// can exercise the tree-building logic directly; it is a pure function.
+    static func buildTree(from items: [GitTreeItem], owner: String, repo: String, branch: String) -> [FileNode] {
         var nodesMap: [String: FileNode] = [:]
 
         // Filter and create nodes
@@ -320,7 +371,7 @@ final class GitHubService: ObservableObject {
     }
 
     /// Sorts nodes in place: directories first, then files, both alphabetically.
-    private func sortNodes(_ nodes: inout [FileNode]) {
+    private static func sortNodes(_ nodes: inout [FileNode]) {
         nodes.sort { a, b in
             if a.isDirectory && !b.isDirectory { return true }
             if !a.isDirectory && b.isDirectory { return false }
@@ -332,7 +383,7 @@ final class GitHubService: ObservableObject {
     ///
     /// Directory nodes are re-created with the pruned children, and every
     /// surviving node gets its `parent` set so breadcrumbs work at any depth.
-    private func pruneEmptyDirectories(nodes: [FileNode], parent: FileNode? = nil) -> [FileNode] {
+    private static func pruneEmptyDirectories(nodes: [FileNode], parent: FileNode? = nil) -> [FileNode] {
         var result: [FileNode] = []
 
         for node in nodes {
