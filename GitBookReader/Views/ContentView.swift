@@ -56,7 +56,35 @@ struct ContentView: View {
 
             Divider()
 
+            sidebarNotices
+
             sidebarListView
+        }
+    }
+
+    /// Non-blocking notices above the file list: a truncated repository tree
+    /// warning and the offline (cached data) indicator.
+    @ViewBuilder
+    private var sidebarNotices: some View {
+        if service.isTreeTruncated {
+            InfoBannerView(
+                icon: "exclamationmark.triangle.fill",
+                title: String(localized: "cache.truncated.title"),
+                message: String(localized: "cache.truncated.message")
+            )
+            .padding(.horizontal)
+            .padding(.top, 8)
+        }
+
+        if let offlineNotice = service.offlineNotice {
+            InfoBannerView(
+                icon: "wifi.slash",
+                title: String(localized: "cache.offline.title"),
+                message: offlineNotice,
+                tint: .blue
+            )
+            .padding(.horizontal)
+            .padding(.top, 8)
         }
     }
 
